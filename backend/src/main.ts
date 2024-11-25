@@ -7,10 +7,10 @@ async function bootstrap() {
   app.enableCors();
 
   const config = new DocumentBuilder()
-    .setTitle('Cats example')
-    .setDescription('The cats API description')
+    .setTitle('Ballot DApp')
+    .setDescription('API for Ballot DApp')
     .setVersion('1.0')
-    .addTag('cats')
+    // .addTag('Routes')
     .build();
   const documentFactory = () => SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api', app, documentFactory);

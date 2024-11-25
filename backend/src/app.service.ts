@@ -6,10 +6,14 @@ import {
   http,
   Address,
   parseEther,
+  formatEther,
+  keccak256,
+  toBytes
 } from 'viem';
 import { sepolia } from 'viem/chains';
 import { privateKeyToAccount } from 'viem/accounts';
 import * as tokenJson from './assets/BallotDappToken.json'
+import * as ballotJson from './assets/Ballot.json'
 
 @Injectable()
 export class AppService {
@@ -29,18 +33,63 @@ export class AppService {
     });
   }
 
-  getHello(): string {
-    return 'Hello World!';
+  getBDTContractAddress(){
+    return this.configServie.get<Address>('BALLOTDAPP_TOKEN_ADDRESS')
   }
 
-  getContractAddress(){
-    return this.configServie.get<Address>('BALLOTDAPP_TOKEN_ADDRESS')
+  getBallotContractAddress(){
+    return this.configServie.get<Address>('BALLOT_ADDRESS')
+  }
+
+  async getTokenDetails(){
+    const tokenName = await this.publicClient.readContract({
+      address: this.getBDTContractAddress(),
+      abi: tokenJson.abi,
+      functionName: "name"
+    })
+
+    const tokenSymbol = await this.publicClient.readContract({
+      address: this.getBDTContractAddress(),
+      abi: tokenJson.abi,
+      functionName: "symbol"
+    })
+
+    const totalSupply = formatEther(await this.publicClient.readContract({
+      address: this.getBDTContractAddress(),
+      abi: tokenJson.abi,
+      functionName: "totalSupply"
+    }))
+
+    return {
+      tokenName,
+      tokenSymbol,
+      totalSupply
+    }
+
+  }
+
+  async checkRole(address): Promise<boolean> {
+    // const minterRole = await this.publicClient.readContract({
+    //   address: this.getContractAddress(),
+    //   abi: tokenJson.abi,
+    //   functionName: "MINTER_ROLE",
+    // })
+      
+    const minterRole = keccak256(toBytes("MINTER_ROLE"));
+
+    const role = await this.publicClient.readContract({
+      address: this.getBDTContractAddress(),
+      abi: tokenJson.abi,
+      functionName: "hasRole",
+      args:[minterRole, address]
+    })
+    return role;    
   }
 
   async mintTokens(address) {
     const amount = parseEther('3')
     const txHash = await this.walletClient.writeContract({
-      address: this.getContractAddress(),
+      address: this.getBDTContractAddress(),
       abi: tokenJson.abi,
       functionName: "mint",
       args: [address, amount]
@@ -54,5 +103,36 @@ export class AppService {
       success: true,
       message: `Minted ${amount} tokens to ${address}`,
     };
+  }
+
+  async delegateTokens(address){
+    const delegateTx = await this.walletClient.writeContract({
+      address: this.getBDTContractAddress(),
+      abi: tokenJson.abi,
+      functionName: "delegate",
+      args:[address]
+    })
+
+    await this.publicClient.waitForTransactionReceipt({
+      hash: delegateTx
+    })
+
+    return `BDT successfully delegated to ${address} for voting`
+  }
+
+  async vote(proposalIndex: number, voteAmount: string){
+    const voteTx = await this.walletClient.writeContract({
+      address: this.getBallotContractAddress(),
+      abi: ballotJson.abi,
+      functionName: "vote",
+      args:[proposalIndex, parseEther(voteAmount)]
+    })
+
+    await this.publicClient.waitForTransactionReceipt({
+      hash: voteTx
+    })
+
+    return `You have successfully casted ${voteAmount} vote(s) for the proposal at index ${proposalIndex}`
+    
   }
 }
